@@ -26,6 +26,7 @@
 #include "google/protobuf/cpp_features.pb.h"
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/descriptor.pb.h"
+#include "editions/edition_defaults_test_utils.h"
 #include "google/protobuf/io/tokenizer.h"
 #include "google/protobuf/io/zero_copy_stream_impl_lite.h"
 #include "google/protobuf/test_textproto.h"
@@ -2218,95 +2219,99 @@ TEST_F(FeatureResolverPoolTest, CompileDefaultsMinimumCovered) {
   auto defaults = FeatureResolver::CompileDefaults(
       feature_set_, {ext}, EDITION_99997_TEST_ONLY, EDITION_99999_TEST_ONLY);
   ASSERT_OK(defaults);
-  EXPECT_THAT(*defaults, EqualsProto(R"pb(
-    minimum_edition: EDITION_99997_TEST_ONLY
-    maximum_edition: EDITION_99999_TEST_ONLY
-    defaults {
-      edition: EDITION_LEGACY
-      overridable_features {
-        [pb.test] {}
-      }
-      fixed_features {
-        field_presence: EXPLICIT
-        enum_type: CLOSED
-        repeated_field_encoding: EXPANDED
-        utf8_validation: NONE
-        message_encoding: LENGTH_PREFIXED
-        json_format: LEGACY_BEST_EFFORT
-        enforce_naming_style: STYLE_LEGACY
-        default_symbol_visibility: EXPORT_ALL
-        [pb.test] { file_feature: VALUE1 }
-      }
-    }
-    defaults {
-      edition: EDITION_PROTO3
-      overridable_features {
-        [pb.test] {}
-      }
-      fixed_features {
-        field_presence: IMPLICIT
-        enum_type: OPEN
-        repeated_field_encoding: PACKED
-        utf8_validation: VERIFY
-        message_encoding: LENGTH_PREFIXED
-        json_format: ALLOW
-        enforce_naming_style: STYLE_LEGACY
-        default_symbol_visibility: EXPORT_ALL
-        [pb.test] { file_feature: VALUE1 }
-      }
-    }
-    defaults {
-      edition: EDITION_2023
-      overridable_features {
-        field_presence: EXPLICIT
-        enum_type: OPEN
-        repeated_field_encoding: PACKED
-        utf8_validation: VERIFY
-        message_encoding: LENGTH_PREFIXED
-        json_format: ALLOW
-        [pb.test] { file_feature: VALUE2 }
-      }
-      fixed_features {
-        enforce_naming_style: STYLE_LEGACY
-        default_symbol_visibility: EXPORT_ALL
-        [pb.test] {}
-      }
-    }
-    defaults {
-      edition: EDITION_2024
-      overridable_features {
-        field_presence: EXPLICIT
-        enum_type: OPEN
-        repeated_field_encoding: PACKED
-        utf8_validation: VERIFY
-        message_encoding: LENGTH_PREFIXED
-        json_format: ALLOW
-        enforce_naming_style: STYLE2024
-        default_symbol_visibility: EXPORT_TOP_LEVEL
-        [pb.test] { file_feature: VALUE2 }
-      }
-      fixed_features {
-        [pb.test] {}
-      }
-    }
-    defaults {
-      edition: EDITION_99998_TEST_ONLY
-      overridable_features {
-        field_presence: EXPLICIT
-        enum_type: OPEN
-        repeated_field_encoding: PACKED
-        utf8_validation: VERIFY
-        message_encoding: LENGTH_PREFIXED
-        json_format: ALLOW
-        enforce_naming_style: STYLE2024
-        default_symbol_visibility: EXPORT_TOP_LEVEL
-        [pb.test] { file_feature: VALUE3 }
-      }
-      fixed_features {
-        [pb.test] {}
-      }
-    }
-  )pb"));
+  FeatureSetDefaults expected;
+  EXPECT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        minimum_edition: EDITION_99997_TEST_ONLY
+        maximum_edition: EDITION_99999_TEST_ONLY
+        defaults {
+          edition: EDITION_LEGACY
+          overridable_features {
+            [pb.test] {}
+          }
+          fixed_features {
+            field_presence: EXPLICIT
+            enum_type: CLOSED
+            repeated_field_encoding: EXPANDED
+            utf8_validation: NONE
+            message_encoding: LENGTH_PREFIXED
+            json_format: LEGACY_BEST_EFFORT
+            enforce_naming_style: STYLE_LEGACY
+            default_symbol_visibility: EXPORT_ALL
+            [pb.test] { file_feature: VALUE1 }
+          }
+        }
+        defaults {
+          edition: EDITION_PROTO3
+          overridable_features {
+            [pb.test] {}
+          }
+          fixed_features {
+            field_presence: IMPLICIT
+            enum_type: OPEN
+            repeated_field_encoding: PACKED
+            utf8_validation: VERIFY
+            message_encoding: LENGTH_PREFIXED
+            json_format: ALLOW
+            enforce_naming_style: STYLE_LEGACY
+            default_symbol_visibility: EXPORT_ALL
+            [pb.test] { file_feature: VALUE1 }
+          }
+        }
+        defaults {
+          edition: EDITION_2023
+          overridable_features {
+            field_presence: EXPLICIT
+            enum_type: OPEN
+            repeated_field_encoding: PACKED
+            utf8_validation: VERIFY
+            message_encoding: LENGTH_PREFIXED
+            json_format: ALLOW
+            [pb.test] { file_feature: VALUE2 }
+          }
+          fixed_features {
+            enforce_naming_style: STYLE_LEGACY
+            default_symbol_visibility: EXPORT_ALL
+            [pb.test] {}
+          }
+        }
+        defaults {
+          edition: EDITION_2024
+          overridable_features {
+            field_presence: EXPLICIT
+            enum_type: OPEN
+            repeated_field_encoding: PACKED
+            utf8_validation: VERIFY
+            message_encoding: LENGTH_PREFIXED
+            json_format: ALLOW
+            enforce_naming_style: STYLE2024
+            default_symbol_visibility: EXPORT_TOP_LEVEL
+            [pb.test] { file_feature: VALUE2 }
+          }
+          fixed_features {
+            [pb.test] {}
+          }
+        }
+        defaults {
+          edition: EDITION_99998_TEST_ONLY
+          overridable_features {
+            field_presence: EXPLICIT
+            enum_type: OPEN
+            repeated_field_encoding: PACKED
+            utf8_validation: VERIFY
+            message_encoding: LENGTH_PREFIXED
+            json_format: ALLOW
+            enforce_naming_style: STYLE2024
+            default_symbol_visibility: EXPORT_TOP_LEVEL
+            [pb.test] { file_feature: VALUE3 }
+          }
+          fixed_features {
+            [pb.test] {}
+          }
+        }
+      )pb",
+      &expected));
+  compiler::CheckEditionDefaults(*defaults, expected);
 }
 
 class FeatureUnboundedTypeTest
