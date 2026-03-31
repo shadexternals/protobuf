@@ -1483,6 +1483,8 @@ void MessageGenerator::GenerateMapEntryClassDefinition(io::Printer* p) {
         [&] {
         }},
        {"decl_annotate", [&] { GenerateAnnotationDecl(p); }},
+       {"alias_parse_table_type",
+        [&] { parse_function_generator_->GenerateAliasParseTableType(p); }},
        {"parse_decls",
         [&] { parse_function_generator_->GenerateDataDecls(p); }}},
       R"cc(
@@ -1508,13 +1510,18 @@ void MessageGenerator::GenerateMapEntryClassDefinition(io::Printer* p) {
           $decl_verify_func$;
 
           static constexpr auto InternalGenerateClassData_(
-              const $pb$::MessageLite& prototype);
+              const $pb$::MessageLite& prototype,
+              const $pbi$::TcParseTableBase* $nullable$ tc_table = nullptr);
 
          private:
           friend class $pb$::MessageLite;
           friend struct ::$tablename$;
+          friend $pbi$::PrivateAccess;
           friend $globals_type$;
 
+          $alias_parse_table_type$;
+          static constexpr ParseTableT_ InternalGenerateParseTable_(
+              const $pbi$::ClassData* $nonnull$ class_data);
           $parse_decls$;
           $decl_annotate$;
 
@@ -2137,6 +2144,8 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* p) {
             )cc");
           }
         }},
+       {"alias_parse_table_type",
+        [&] { parse_function_generator_->GenerateAliasParseTableType(p); }},
        {"decl_data", [&] { parse_function_generator_->GenerateDataDecls(p); }},
        {"post_loop_handler",
         [&] {
@@ -2198,6 +2207,9 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* p) {
               CopyFrom(from);
             }
             return *this;
+          }
+          static constexpr const void* $nonnull$ internal_message_globals() {
+            return &_$Msg$_globals_;
           }
           $decl_verify_func$;
 
@@ -2279,7 +2291,8 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* p) {
           //~ `auto` return type it is not callable from outside the .pb.cc
           //~ without a definition so it is effectively private.
           static constexpr auto InternalGenerateClassData_(
-              const MessageLite& prototype);
+              const MessageLite& prototype,
+              const $pbi$::TcParseTableBase* $nullable$ tc_table = nullptr);
 
           $get_metadata$;
           $decl_split_methods$;
@@ -2299,6 +2312,9 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* p) {
           class _Internal;
           $decl_set_has$;
           $decl_oneof_has$;
+          $alias_parse_table_type$;
+          static constexpr ParseTableT_ InternalGenerateParseTable_(
+              const $pbi$::ClassData* $nonnull$ class_data);
           $decl_data$;
           $post_loop_handler$;
 
@@ -2420,51 +2436,6 @@ void MessageGenerator::GenerateClassMethods(io::Printer* p) {
               }
             )cc");
   }
-  p->Emit(
-      {{"has_bit",
-        [&] {
-          if (has_bit_indices_.empty()) return;
-          p->Emit(
-              R"cc(
-                using HasBits =
-                    decltype(::std::declval<$classname$>().$has_bits$);
-                static constexpr ::int32_t kHasBitsOffset =
-                    8 * PROTOBUF_FIELD_OFFSET($classname$, _impl_._has_bits_);
-              )cc");
-        }},
-       {"oneof",
-        [&] {
-          if (descriptor_->real_oneof_decl_count() == 0) return;
-          p->Emit(
-              R"cc(
-                static constexpr ::int32_t kOneofCaseOffset =
-                    PROTOBUF_FIELD_OFFSET($classtype$, $oneof_case$);
-              )cc");
-        }},
-       {"required",
-        [&] {
-          if (num_required_fields_ == 0) return;
-          const std::vector<uint32_t> masks_for_has_bits =
-              RequiredFieldsBitMask();
-          p->Emit(
-              {{"check_bit_mask", ConditionalToCheckBitmasks(
-                                      masks_for_has_bits, false, "has_bits")}},
-              R"cc(
-                static bool MissingRequiredFields(const HasBits& has_bits) {
-                  return $check_bit_mask$;
-                }
-              )cc");
-        }}},
-      R"cc(
-        class $classname$::_Internal {
-         public:
-          $has_bit$;
-          $oneof$;
-          $required$;
-        };
-      )cc");
-  p->Emit("\n");
-
   // Generate non-inline field definitions.
   for (auto field : internal::FieldRange(descriptor_)) {
     auto v = p->WithVars(FieldVars(field, options_));
@@ -3978,11 +3949,16 @@ void MessageGenerator::GenerateInternalGenerateClassData(io::Printer* p) {
         },
         R"cc(
           constexpr auto $classname$::InternalGenerateClassData_(
-              const MessageLite& prototype) {
+              const MessageLite& prototype,
+              const $pbi$::TcParseTableBase* tc_table) {
             return $pbi$::ClassDataFull{
                 $pbi$::ClassData{
                     &prototype,
+#ifndef PROTOBUF_MESSAGE_GLOBALS
                     &_table_.header,
+#else
+                    tc_table,
+#endif
                     $is_initialized$,
                     &$classname$::MergeImpl,
                     $superclass$::GetNewImpl<$classname$>(),
@@ -4011,11 +3987,16 @@ void MessageGenerator::GenerateInternalGenerateClassData(io::Printer* p) {
         },
         R"cc(
           constexpr auto $classname$::InternalGenerateClassData_(
-              const MessageLite& prototype) {
+              const MessageLite& prototype,
+              const $pbi$::TcParseTableBase* tc_table) {
             return $pbi$::ClassDataLite{
                 {
                     &prototype,
+#ifndef PROTOBUF_MESSAGE_GLOBALS
                     &_table_.header,
+#else
+                    tc_table,
+#endif
                     $is_initialized$,
                     &$classname$::MergeImpl,
                     $superclass$::GetNewImpl<$classname$>(),
@@ -4087,7 +4068,8 @@ void MessageGenerator::GenerateClassData(io::Printer* p) {
             $classname$::GetClassData() const {
               $pin_weak_descriptor$;
               $pbi$::PrefetchToLocalCache(&$globals$);
-              $pbi$::PrefetchToLocalCache($globals$.GetClassData()->tc_table);
+              $pbi$::PrefetchToLocalCache(
+                  $pbi$::MessageGlobalsBase::ToParseTableBase(&$globals$));
               return $globals$.GetClassData();
             }
 #endif  // !PROTOBUF_MESSAGE_GLOBALS
@@ -4122,7 +4104,8 @@ void MessageGenerator::GenerateClassData(io::Printer* p) {
             $classname$::GetClassData() const {
               $pin_weak_descriptor$;
               $pbi$::PrefetchToLocalCache(&$globals$);
-              $pbi$::PrefetchToLocalCache($globals$.GetClassData()->tc_table);
+              $pbi$::PrefetchToLocalCache(
+                  $pbi$::MessageGlobalsBase::ToParseTableBase(&$globals$));
               return $globals$.GetClassData();
             }
 #endif  // !PROTOBUF_MESSAGE_GLOBALS
@@ -5542,6 +5525,57 @@ void MessageGenerator::GenerateSourceDefaultInstance(io::Printer* p) {
   auto v = p->WithVars(ClassVars(descriptor_, options_));
   auto t = p->WithVars(MakeTrackerCalls(descriptor_, options_));
 
+  if (!IsMapEntryMessage(descriptor_)) {
+    p->Emit(
+        {{"has_bit",
+          [&] {
+            if (has_bit_indices_.empty()) return;
+            p->Emit(
+                R"cc(
+                  using HasBits =
+                      decltype(::std::declval<$classname$>().$has_bits$);
+                  static constexpr ::int32_t kHasBitsOffset =
+                      8 * PROTOBUF_FIELD_OFFSET($classname$, _impl_._has_bits_);
+                )cc");
+          }},
+         {"oneof",
+          [&] {
+            if (descriptor_->real_oneof_decl_count() == 0) return;
+            p->Emit(
+                R"cc(
+                  static constexpr ::int32_t kOneofCaseOffset =
+                      PROTOBUF_FIELD_OFFSET($classtype$, $oneof_case$);
+                )cc");
+          }},
+         {"required",
+          [&] {
+            if (num_required_fields_ == 0) return;
+            const std::vector<uint32_t> masks_for_has_bits =
+                RequiredFieldsBitMask();
+            p->Emit(
+                {{"check_bit_mask",
+                  ConditionalToCheckBitmasks(masks_for_has_bits, false,
+                                             "has_bits")}},
+                R"cc(
+                  static bool MissingRequiredFields(const HasBits& has_bits) {
+                    return $check_bit_mask$;
+                  }
+                )cc");
+          }}},
+        R"cc(
+          class $classname$::_Internal {
+           public:
+            $has_bit$;
+            $oneof$;
+            $required$;
+          };
+        )cc");
+    p->Emit("\n");
+  }
+
+  parse_function_generator_->GenerateParseTableHelperDefinition(p);
+  p->Emit("\n");
+
   // Generate the split instance first because it's needed in the constexpr
   // constructor.
   if (ShouldSplit(descriptor_, options_)) {
@@ -5591,47 +5625,64 @@ void MessageGenerator::GenerateSourceDefaultInstance(io::Printer* p) {
   GenerateNewOp(p);
   GenerateInternalGenerateClassData(p);
 
+  auto section_name =
+      MaybeDedicateSection(descriptor_, options_, index_in_file_messages_);
+
   if (IsFileDescriptorProto(descriptor_->file(), options_)) {
     // Note that unused class_data #ifndef PROOTBUF_CUSTOM_VTABLE is ignored and
     // incurs no overhead for constexpr constructors.
-    p->Emit(
-        R"cc(
-          struct $globals_type$ : ::_pbi::MessageGlobalsBase {
-#ifndef PROTOBUF_MESSAGE_GLOBALS
-#if defined(PROTOBUF_CONSTINIT_DEFAULT_INSTANCES)
-            constexpr $globals_type$()
-                : _default(::_pbi::ConstantInitialized{},
-                           $Msg$_class_data_.base()) {}
-#else   // defined(PROTOBUF_CONSTINIT_DEFAULT_INSTANCES)
-            $globals_type$() {}
-            void Init() { ::new (&_default) $classname$(); };
-#endif  // defined(PROTOBUF_CONSTINIT_DEFAULT_INSTANCES)
-#else   // PROTOBUF_MESSAGE_GLOBALS
-#if defined(PROTOBUF_CONSTINIT_DEFAULT_INSTANCES)
-            constexpr $globals_type$()
-                : MessageGlobalsBase(
-                      $Msg$::InternalGenerateClassData_(_default)),
-                  _default(::_pbi::ConstantInitialized{}, GetClassData()) {}
-#else   // defined(PROTOBUF_CONSTINIT_DEFAULT_INSTANCES)
-            $globals_type$()
-                : MessageGlobalsBase(
-                      $Msg$::InternalGenerateClassData_(_default)) {}
-            void Init() { ::new (&_default) $classname$(); };
-#endif  // defined(PROTOBUF_CONSTINIT_DEFAULT_INSTANCES)
-#endif  // PROTOBUF_MESSAGE_GLOBALS
-            ~$globals_type$() {}
-            union {
-              alignas(::_pbi::kMaxMessageAlignment) $classname$ _default;
-            };
-          };
+    p->Emit({{"section",
+              [&] {
+                if (!section_name.has_value()) return;
+                p->Emit({{"section_name", *section_name}},
+                        R"cc(
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-          static_assert(PROTOBUF_FIELD_OFFSET($globals_type$, _default) ==
-                        ::_pbi::MessageGlobalsBase::OffsetToDefault());
+                          __attribute__((section("$section_name$")))
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+                        )cc");
+              }}},
+            R"cc(
+              struct $globals_type$ : ::_pbi::MessageGlobalsBase {
+#if defined(PROTOBUF_CONSTINIT_DEFAULT_INSTANCES)
+                constexpr
+#endif  // PROTOBUF_CONSTINIT_DEFAULT_INSTANCES
+                    $globals_type$()
+                    :
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+                      MessageGlobalsBase(
+                          $Msg$::InternalGenerateClassData_(
+                              _default, &$globals$._table.header),
+                          &$globals$._table.header),
+                      _default(::_pbi::ConstantInitialized{}, GetClassData()),
+                      _table(::_pbi::PrivateAccess::GenerateParseTable<$Msg$>(
+                          GetClassData()))
+#else
+                      _default(::_pbi::ConstantInitialized{},
+                               $Msg$_class_data_.base())
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+                {
+                }
+#if !defined(PROTOBUF_CONSTINIT_DEFAULT_INSTANCES)
+                void Init() { ::new (&_default) $classname$(); };
+#endif  // !PROTOBUF_CONSTINIT_DEFAULT_INSTANCES
+                ~$globals_type$() {}
+                union {
+                  alignas(::_pbi::kMaxMessageAlignment) $classname$ _default;
+                };
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+                decltype(::_pbi::PrivateAccess::GenerateParseTable<$Msg$>(
+                    ::std::declval<const ::_pbi::ClassData*>())) _table;
+#endif
+              };
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+              static_assert(PROTOBUF_FIELD_OFFSET($globals_type$, _default) ==
+                            ::_pbi::MessageGlobalsBase::OffsetToDefault());
 #endif  // PROTOBUF_MESSAGE_GLOBALS
 
-          PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT$ dllexport_decl$
-              PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 $globals_type$ $globals$;
-        )cc");
+              PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT$ dllexport_decl$
+                  PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 $section$ $globals_type$
+                      $globals$;
+            )cc");
   } else if (UsingImplicitWeakDescriptor(descriptor_->file(), options_)) {
     // Note that unused class_data #ifndef PROOTBUF_CUSTOM_VTABLE is ignored and
     // incurs no overhead for constexpr constructors.
@@ -5649,15 +5700,22 @@ void MessageGenerator::GenerateSourceDefaultInstance(io::Printer* p) {
                            $Msg$_class_data_.base()) {}
 #else
             constexpr $globals_type$()
-                : MessageGlobalsBase(
-                      $Msg$::InternalGenerateClassData_(_default)),
-                  _default(::_pbi::ConstantInitialized{}, GetClassData()) {}
+                : MessageGlobalsBase($Msg$::InternalGenerateClassData_(
+                                         _default, &$globals$._table.header),
+                                     &$globals$._table.header),
+                  _default(::_pbi::ConstantInitialized{}, GetClassData()),
+                  _table(::_pbi::PrivateAccess::GenerateParseTable<$Msg$>(
+                      GetClassData())) {}
 #endif  // PROTOBUF_MESSAGE_GLOBALS
             ~$globals_type$() {}
             //~ _default must be the first member.
             union {
               alignas(::_pbi::kMaxMessageAlignment) $classname$ _default;
             };
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+            decltype(::_pbi::PrivateAccess::GenerateParseTable<$Msg$>(
+                ::std::declval<const ::_pbi::ClassData*>())) _table;
+#endif
             ::_pbi::WeakDescriptorDefaultTail tail = {
                 file_message_globals + $index$, sizeof($globals_type$)};
           };
@@ -5673,34 +5731,52 @@ void MessageGenerator::GenerateSourceDefaultInstance(io::Printer* p) {
   } else {
     // Note that unused class_data #ifndef PROOTBUF_CUSTOM_VTABLE is ignored and
     // incurs no overhead for constexpr constructors.
-    p->Emit(
-        R"cc(
-          struct $globals_type$ : ::_pbi::MessageGlobalsBase {
-            constexpr $globals_type$()
-                :
-#ifndef PROTOBUF_MESSAGE_GLOBALS
-                  _default(::_pbi::ConstantInitialized{},
-                           $Msg$_class_data_.base())
-#else   // !PROTOBUF_MESSAGE_GLOBALS
-                  MessageGlobalsBase(
-                      $Msg$::InternalGenerateClassData_(_default)),
-                  _default(::_pbi::ConstantInitialized{}, GetClassData())
-#endif  // PROTOBUF_MESSAGE_GLOBALS
-            {
-            }
-            ~$globals_type$() {}
-            union {
-              alignas(::_pbi::kMaxMessageAlignment) $classname$ _default;
-            };
-          };
+    p->Emit({{"section",
+              [&] {
+                if (!section_name.has_value()) return;
+                p->Emit({{"section_name", *section_name}},
+                        R"cc(
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-          static_assert(PROTOBUF_FIELD_OFFSET($globals_type$, _default) ==
-                        ::_pbi::MessageGlobalsBase::OffsetToDefault());
+                          __attribute__((section("$section_name$")))
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+                        )cc");
+              }}},
+            R"cc(
+              struct $globals_type$ : ::_pbi::MessageGlobalsBase {
+                constexpr $globals_type$()
+                    :
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+                      _default(::_pbi::ConstantInitialized{},
+                               $Msg$_class_data_.base())
+#else   // !PROTOBUF_MESSAGE_GLOBALS
+                      MessageGlobalsBase(
+                          $Msg$::InternalGenerateClassData_(
+                              _default, &$globals$._table.header),
+                          &$globals$._table.header),
+                      _default(::_pbi::ConstantInitialized{}, GetClassData()),
+                      _table(::_pbi::PrivateAccess::GenerateParseTable<$Msg$>(
+                          GetClassData()))
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+                {
+                }
+                ~$globals_type$() {}
+                union {
+                  alignas(::_pbi::kMaxMessageAlignment) $classname$ _default;
+                };
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+                decltype(::_pbi::PrivateAccess::GenerateParseTable<$Msg$>(
+                    ::std::declval<const ::_pbi::ClassData*>())) _table;
+#endif
+              };
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+              static_assert(PROTOBUF_FIELD_OFFSET($globals_type$, _default) ==
+                            ::_pbi::MessageGlobalsBase::OffsetToDefault());
 #endif  // PROTOBUF_MESSAGE_GLOBALS
 
-          PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT$ dllexport_decl$
-              PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 $globals_type$ $globals$;
-        )cc");
+              PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT$ dllexport_decl$
+                  PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 $section$ $globals_type$
+                      $globals$;
+            )cc");
   }
   p->Emit(R"cc(
 #if defined(PROTOBUF_CUSTOM_VTABLE)
