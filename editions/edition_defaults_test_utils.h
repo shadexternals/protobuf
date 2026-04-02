@@ -17,6 +17,13 @@ namespace compiler {
 absl::optional<FeatureSetDefaults::FeatureSetEditionDefault> FindEditionDefault(
     const FeatureSetDefaults& defaults, Edition edition);
 
+// Removes any EDITION_UNSTABLE entries from the defaults repeated field.
+void ScrubUnstable(FeatureSetDefaults& defaults);
+
+// Compares feature set defaults, ignoring unstable editions.
+void CheckEditionDefaults(const FeatureSetDefaults& actual,
+                          const FeatureSetDefaults& expected);
+
 }  // namespace compiler
 }  // namespace protobuf
 }  // namespace google
